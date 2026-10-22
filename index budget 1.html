@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mon Budget du Mois</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, Arial, sans-serif; background: #111318; color: #f5f2e8; padding: 16px; max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 22px; color: #e8c66a; text-align: center; margin: 8px 0 2px; }
+  .sub { text-align: center; font-size: 13px; color: #b9b4a3; margin-bottom: 16px; }
+  .card { background: #1c1f26; border: 1px solid #333743; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  .monthbar { display: flex; justify-content: space-between; align-items: center; }
+  .monthbar button { background: #2a2e39; color: #f5f2e8; border: 1px solid #444a5a; border-radius: 10px; font-size: 18px; padding: 6px 14px; }
+  .monthname { font-size: 17px; font-weight: bold; text-transform: capitalize; }
+  .total { font-size: 30px; font-weight: bold; color: #e8c66a; text-align: center; margin: 6px 0 2px; }
+  .totallabel { text-align: center; font-size: 13px; color: #b9b4a3; }
+  .gaugeWrap { background: #2a2e39; border-radius: 20px; height: 14px; overflow: hidden; margin: 10px 0 6px; }
+  .gauge { background: #4caf6d; height: 100%; width: 0%; }
+  .gauge.over { background: #d9534f; }
+  .remain { text-align: center; font-size: 14px; }
+  label { display: block; font-size: 13px; color: #b9b4a3; margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid #444a5a; background: #242833; color: #f5f2e8; }
+  .addbtn { width: 100%; margin-top: 14px; padding: 14px; font-size: 17px; font-weight: bold; border: none; border-radius: 12px; background: #e8c66a; color: #191b20; }
+  .catrow { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #2c303c; font-size: 15px; }
+  .catrow:last-child { border-bottom: none; }
+  .item { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #2c303c; }
+  .item:last-child { border-bottom: none; }
+  .item .amt { font-weight: bold; white-space: nowrap; }
+  .item .meta { font-size: 12px; color: #b9b4a3; }
+  .del { background: none; border: none; font-size: 17px; padding: 4px 6px; }
+  .smallbtn { background: #2a2e39; color: #f5f2e8; border: 1px solid #444a5a; border-radius: 10px; padding: 10px; font-size: 14px; width: 100%; margin-top: 8px; }
+  .empty { text-align: center; color: #b9b4a3; padding: 12px 0; font-size: 14px; }
+  .warn { display: none; background: #5a2b2b; color: #ffd9d9; border-radius: 10px; padding: 10px; font-size: 13px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<h1>💰 Mon Budget du Mois</h1>
+<p class="sub">Note tes dépenses chaque jour. Simple, privé : tout reste sur ton téléphone.</p>
+
+<div class="warn" id="warn">⚠️ Ton téléphone bloque la sauvegarde sur ce fichier. Garde la page ouverte dans ton navigateur pour que tes dépenses restent enregistrées.</div>
+
+<div class="card">
+  <div class="monthbar">
+    <button id="prev">‹</button>
+    <div class="monthname" id="monthName"></div>
+    <button id="next">›</button>
+  </div>
+  <div class="total" id="total">0 F</div>
+  <div class="totallabel">Total dépensé ce mois</div>
+  <div class="gaugeWrap"><div class="gauge" id="gauge"></div></div>
+  <div class="remain" id="remain"></div>
+  <label>Mon budget pour ce mois (F CFA) — facultatif</label>
+  <input type="number" id="budgetInput" inputmode="numeric" placeholder="Ex : 50000">
+  <button class="smallbtn" id="saveBudget">Enregistrer le budget</button>
+</div>
+
+<div class="card">
+  <label>Montant dépensé (F CFA)</label>
+  <input type="number" id="amount" inputmode="numeric" placeholder="Ex : 2000">
+  <label>Catégorie</label>
+  <select id="cat">
+    <option>Nourriture</option>
+    <option>Transport</option>
+    <option>Logement</option>
+    <option>Santé</option>
+    <option>Forfait</option>
+    <option>Autres</option>
+  </select>
+  <label>Date</label>
+  <input type="date" id="date">
+  <label>Note (facultatif)</label>
+  <input type="text" id="note" placeholder="Ex : marché, taxi, pharmacie...">
+  <button class="addbtn" id="add">+ Ajouter la dépense</button>
+</div>
+
+<div class="card">
+  <strong>Dépenses par catégorie</strong>
+  <div id="cats" style="margin-top:8px"></div>
+</div>
+
+<div class="card">
+  <strong>Mes dépenses du mois</strong>
+  <div id="list" style="margin-top:8px"></div>
+  <button class="smallbtn" id="exportBtn">📤 Exporter le mois (fichier texte)</button>
+</div>
+
+<script>
+var KEY = 'monBudgetVierge_v1';
+var storeOk = true;
+function load() {
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { storeOk = false; }
+  return { expenses: [], budgets: {} };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(data)); }
+  catch (e) { storeOk = false; document.getElementById('warn').style.display = 'block'; }
+}
+var data = load();
+if (!storeOk) document.getElementById('warn').style.display = 'block';
+
+var now = new Date();
+var viewY = now.getFullYear(), viewM = now.getMonth();
+var MONTHS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+var CATS = ['Nourriture','Transport','Logement','Santé','Forfait','Autres'];
+
+function fmt(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' F'; }
+function monthKey() { return viewY + '-' + ('0' + (viewM + 1)).slice(-2); }
+function inMonth(e) {
+  var d = e.date.split('-');
+  return parseInt(d[0], 10) === viewY && parseInt(d[1], 10) === viewM + 1;
+}
+
+function render() {
+  document.getElementById('monthName').textContent = MONTHS[viewM] + ' ' + viewY;
+  var list = data.expenses.filter(inMonth);
+  var total = list.reduce(function (s, e) { return s + e.amount; }, 0);
+  document.getElementById('total').textContent = fmt(total);
+  var budget = data.budgets[monthKey()] || 0;
+  document.getElementById('budgetInput').value = budget ? budget : '';
+  var gauge = document.getElementById('gauge');
+  var remain = document.getElementById('remain');
+  if (budget > 0) {
+    var pct = Math.min(100, Math.round(total / budget * 100));
+    gauge.style.width = pct + '%';
+    gauge.className = 'gauge' + (total > budget ? ' over' : '');
+    remain.textContent = total > budget
+      ? '⚠️ Budget dépassé de ' + fmt(total - budget)
+      : 'Il te reste ' + fmt(budget - total) + ' sur ' + fmt(budget);
+  } else {
+    gauge.style.width = '0%';
+    remain.textContent = 'Aucun budget fixé pour ce mois.';
+  }
+  var catsHtml = '';
+  CATS.forEach(function (c) {
+    var t = list.filter(function (e) { return e.cat === c; }).reduce(function (s, e) { return s + e.amount; }, 0);
+    if (t > 0) catsHtml += '<div class="catrow"><span>' + c + '</span><span>' + fmt(t) + '</span></div>';
+  });
+  document.getElementById('cats').innerHTML = catsHtml || '<div class="empty">Aucune dépense ce mois.</div>';
+  list.sort(function (a, b) { return b.date.localeCompare(a.date); });
+  var html = '';
+  list.forEach(function (e) {
+    html += '<div class="item"><div><div>' + e.cat + (e.note ? ' — ' + e.note : '') + '</div>' +
+      '<div class="meta">' + e.date.split('-').reverse().join('/') + '</div></div>' +
+      '<div><span class="amt">' + fmt(e.amount) + '</span> <button class="del" data-id="' + e.id + '">🗑️</button></div></div>';
+  });
+  document.getElementById('list').innerHTML = html || '<div class="empty">Ajoute ta première dépense ci-dessus 👆</div>';
+  var dels = document.querySelectorAll('.del');
+  for (var i = 0; i < dels.length; i++) {
+    dels[i].onclick = function () {
+      if (confirm('Supprimer cette dépense ?')) {
+        var id = this.getAttribute('data-id');
+        data.expenses = data.expenses.filter(function (e) { return String(e.id) !== id; });
+        save(); render();
+      }
+    };
+  }
+}
+
+document.getElementById('prev').onclick = function () { viewM--; if (viewM < 0) { viewM = 11; viewY--; } render(); };
+document.getElementById('next').onclick = function () { viewM++; if (viewM > 11) { viewM = 0; viewY++; } render(); };
+document.getElementById('saveBudget').onclick = function () {
+  var v = parseInt(document.getElementById('budgetInput').value, 10);
+  data.budgets[monthKey()] = isNaN(v) ? 0 : v;
+  save(); render();
+};
+document.getElementById('add').onclick = function () {
+  var amt = parseInt(document.getElementById('amount').value, 10);
+  if (isNaN(amt) || amt <= 0) { alert('Entre un montant correct.'); return; }
+  var d = document.getElementById('date').value;
+  if (!d) { alert('Choisis une date.'); return; }
+  data.expenses.push({
+    id: Date.now(),
+    amount: amt,
+    cat: document.getElementById('cat').value,
+    date: d,
+    note: document.getElementById('note').value.trim()
+  });
+  save();
+  document.getElementById('amount').value = '';
+  document.getElementById('note').value = '';
+  var parts = d.split('-');
+  viewY = parseInt(parts[0], 10); viewM = parseInt(parts[1], 10) - 1;
+  render();
+};
+document.getElementById('exportBtn').onclick = function () {
+  var list = data.expenses.filter(inMonth).sort(function (a, b) { return a.date.localeCompare(b.date); });
+  var total = list.reduce(function (s, e) { return s + e.amount; }, 0);
+  var txt = 'MON BUDGET — ' + MONTHS[viewM] + ' ' + viewY + '\nTotal : ' + fmt(total) + '\n\n';
+  list.forEach(function (e) { txt += e.date.split('-').reverse().join('/') + ' — ' + e.cat + (e.note ? ' (' + e.note + ')' : '') + ' : ' + fmt(e.amount) + '\n'; });
+  var blob = new Blob([txt], { type: 'text/plain' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'mon-budget-' + monthKey() + '.txt';
+  a.click();
+};
+
+(function initDate() {
+  var t = new Date();
+  var s = t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2) + '-' + ('0' + t.getDate()).slice(-2);
+  document.getElementById('date').value = s;
+})();
+render();
+</script>
+</body>
+</html>
